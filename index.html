@@ -1,0 +1,1077 @@
+<!DOCTYPE html>
+<html lang="" xml:lang="">
+  <head>
+    <title>Reproducible computation at scale in R</title>
+    <meta charset="utf-8" />
+    <meta name="author" content="Will Landau" />
+    <script src="index_files/header-attrs/header-attrs.js"></script>
+    <link href="index_files/remark-css/default.css" rel="stylesheet" />
+    <link href="index_files/remark-css/default-fonts.css" rel="stylesheet" />
+  </head>
+  <body>
+    <textarea id="source">
+class: center, middle, inverse, title-slide
+
+# Reproducible computation at scale in R
+### Will Landau
+
+---
+
+
+&lt;style&gt;
+.inverse {
+background-color: transparent;
+text-shadow: 0 0 0px transparent;
+}
+.title-slide {
+vertical-align: bottom !important; 
+text-align: center !important;
+}
+.title-slide h1 {
+position: absolute;
+top: 0;
+left: 0;
+right: 0;
+width: 100%;
+line-height: 4em;
+color: #666666;
+}
+.title-slide h3 {
+line-height: 6em;
+color: #666666;
+}
+.title-slide {
+background-color: white;
+background-image: url('images/logo.png');
+background-repeat: no-repeat;
+background-size: 25%;
+}
+.remark-slide-content:after {
+content: "Copyright Eli Lilly and Company";
+position: absolute;
+bottom: -5px;
+left: 10px;
+height: 40px;
+width: 100%;
+font-family: Helvetica, Arial, sans-serif;
+font-size: 0.7em;
+color: gray;
+background-repeat: no-repeat;
+background-size: contain;
+}
+&lt;/style&gt;
+
+
+
+
+
+## Large statistical computation
+
+* [Bayesian data analysis](https://mc-stan.org/)
+* [Bayesian network meta-analysis](https://bookdown.org/MathiasHarrer/Doing_Meta_Analysis_in_R/bayesian-network-meta-analysis.html)
+* [Graph-based multiple comparison procedures](https://github.com/kornl/gMCP)
+* [Subgroup identification](https://cran.r-project.org/web/packages/TSDT/index.html)
+* [Predictive modeling](http://appliedpredictivemodeling.com/computing)
+* [Deep neural networks](https://keras.rstudio.com/)
+* [PK/PD modeling](https://github.com/nlmixrdevelopment/nlmixr)
+* Clinical trial simulation
+* Target identification
+
+???
+
+Thank you all for coming, and thank you to nyhackr and Lander Analytics for the opportunity to speak today.
+
+I come from the life sciences, and we develop ambitious computational workflows for Statistics and data science. There's a lot of Bayesian analysis, machine learning, simulation, and prediction. Other domains have similar workloads, and we need to think about both efficiency and reproducibility right from the start.
+
+---
+
+## Common features
+
+1. Heavy use of the [R language](https://www.r-project.org/).
+2. Long runtimes.
+3. Multiple sub-tasks.
+4. Frequent changes to code and data.
+
+&lt;img src = "./images/sisyphus.svg" align="left" style="border: none; box-shadow: none; height: 325px; text-align: center;"&gt;
+&lt;br&gt;
+&lt;a href="https://openclipart.org/detail/275842/sisyphus-overcoming-silhouette"&gt;https://openclipart.org/detail/275842/sisyphus-overcoming-silhouette&lt;/a&gt;
+
+???
+
+Many of these projects require long runtimes. Methods like Markov chain Monte Carlo and deep neural nets are computationally expensive. It could take hours or even days just to fit a single model. That's fine if you're only going to run the project once, or at regularly scheduled times. But if the code is still under development, it's easy to get trapped in a vicious Sisyphean cycle.
+
+---
+
+## Interconnected tasks
+&lt;center&gt;
+&lt;img src = "./images/workflow.png" align="middle" style="border: none; box-shadow: none; text-align: center;"&gt;
+&lt;/center&gt;
+
+???
+
+A large workflow has a large number of moving parts. We have datasets that we preprocess or simulate, analyses of those datasets, and summaries of the analyses.
+
+---
+
+## Changes
+
+&lt;center&gt;
+&lt;img src = "./images/change.png" align="middle" style="border: none; box-shadow: none; text-align: center;"&gt;
+&lt;/center&gt;
+
+???
+
+If you change any one of these parts - whether it's a bugfix, a tweak to a model, or some new data -
+
+---
+
+## Consequences
+
+&lt;center&gt;
+&lt;img src = "./images/downstream.png" align="middle" style="border: none; box-shadow: none; text-align: center;"&gt;
+&lt;/center&gt;
+
+???
+
+Then everything that depends on it is no longer valid, and you need to rerun the computation to bring the results back up to date. This is seriously frustrating when you're in development and you're still making a constant stream of changes to code and data in real time. If every change means you need to rerun the project, there's no way the results can keep up...
+
+---
+
+## Pipeline tools and workflow managers
+
+&lt;center&gt;
+&lt;img src = "./images/infographic.svg" align="middle" style="border: none; box-shadow: none; text-align: center;"&gt;
+&lt;/center&gt;
+
+- Tons exist already: [github.com/pditommaso/awesome-pipeline](https://github.com/pditommaso/awesome-pipeline).
+- Most are language-agnostic or designed for Python or the shell.
+
+???
+
+...unless you use a pipeline tool. There are pipeline tools for production which resemble Apache Airflow, and there are pipeline tools for development which resemble GNU Make. Today, I'm going to focus on Make-like tools because those are the ones I think are designed for this part of the process. It's an action-packed space, and there are a lot of great options. But unfortunately, there's not a whole lot for R.
+
+---
+
+## What distinguishes `targets`?
+
+&lt;center&gt;
+&lt;img src = "./images/R.png" align="middle" style="border: none; box-shadow: none; text-align: center; height: 80px"&gt;
+&lt;/center&gt;
+
+* Fundamentally designed for R.
+* Supports a clean, modular, function-oriented programming style.
+* Abstracts files as R objects and automatically manages data.
+* Surpasses the permanent limitations of its predecessor, [`drake`](https://github.com/ropensci/drake): &lt;https://wlandau.github.io/targets/articles/need.html&gt;
+
+???
+
+That's where targets comes in. targets is a Make-like pipeline tool that is fundamentally designed for R. You can call it from an R session, it supports a clean, idiomatic, function-oriented style of programming, and it helps you store and retrieve your results. Most importantly, it gets you out of the Sisyphean loop of long computation, enhances reproducibility, and takes the frustration out of data science.
+
+---
+
+## What about `drake`?
+
+* `drake` is still an excellent choice for pipeline management, but it has permanent user-side limitations.
+* `targets` was created to overcome these limitations and create a smoother user experience.
+    1. Stronger guardrails by design.
+    1. A friendlier, lighter, more transparent data management system.
+    1. Show which *functions* are up to date.
+    1. More flexible dynamic branching, including compatibility with `dplyr::group_by()`.
+    1. Improved parallel efficiency.
+    1. Designed for custom user-side [metaprogramming](https://wlandau.github.io/targets-manual/branching.html#metaprogramming) and target archetypes: &lt;https://wlandau.github.io/tarchetypes/&gt;.
+* The statement of need describes the details: &lt;https://wlandau.github.io/targets/articles/need.html&gt;.
+
+???
+
+But what about drake? drake already does all these things, and it's still an excellent choice for Make-like pipeline management. But it does have permanent user-side limitations. We've been developing, improving, expanding, and refining drake for several years, and we've reached the point where the most important problems to tackle are exactly the problems we cannot solve in this tool. It's just too big and too set in its ways, and its architecture was originally designed around assumptions that no longer hold up. To overcome these permanent limitations, we need a new tool that borrows from drake's journey and advances the user experience beyond what drake is capable of, and that new tool is targets. targets has stronger guardrails, lighter data management, greater transparency around data and the process of watching for changes, more flexible dynamic branching, better parallel efficiency, and design that lets us build on top of it more easily. The targets package website has a statement of need describing the changes in more detail.
+
+---
+
+## Guardrails in `targets`
+
+* The only way to use `targets` is the correct way.
+* Main guardrails:
+    1. Always run in a fresh R process (unless you deliberately configure `targets` for debugging).
+    2. Require a `_targets.R` configuration file in the project root.
+    3. Require the `_targets/` data store to always be in the project root.
+
+???
+
+Let's start with guardrails. The only way to use targets is the correct way. Unless you deliberately opt out for debugging purposes, targets always does its work in a fresh clean reproducible R process to avoid unpredictably invalidating targets. It's also paternalistic about your working directory and data storage. It removes flexibility where it doesn't belong, and it keeps users from getting themselves into trouble.
+
+---
+
+## `drake`'s cache
+
+```
+.drake/
+├── config/
+├── data/
+├───── 17bfcef645301416.rds
+├───── 21935c86f12692e2.rds
+├───── 37caf5df2892cfc4.rds
+├───── ...
+├── drake/
+├── keys/
+├───── memoize/
+├───── meta/
+├───── objects/
+├───── ...
+└── scratch/
+```
+
+???
+
+Now for data management. drake's cache is a large file system. It has hundreds of tiny bookkeeping files, it gets heavier and heavier over time unless you deliberately run garbage collection, and it's not human-readable. If you commit this thing to Git, or try to share with your colleagues, or try to diagnose cryptic errors that come from corrupted data, you're going to have a hard time.
+
+---
+
+## The data store in `targets`
+
+```
+_targets/
+├── meta/
+├───── meta
+├───── progress
+├── objects/
+├───── target_name_1
+├───── target_name_2
+├───── target_name_3
+└───── ...
+```
+
+???
+
+targets simplifies data storage. It only stores what it needs to. There's one file per target in the objects/ folder, one data.table with metadata, and one data.table with runtime progress information. The data store is much lighter and much more portable, and the file names all make sense. And it survives corruptions far more easily. Of all these files, only the metadata file is sacred. Anything else can break and the project can recover just by rerunning one or two targets.
+
+---
+
+## Seamless AWS S3 integration
+
+&lt;https://wlandau.github.io/targets-manual/cloud.html&gt;
+
+
+```r
+# _targets.R
+tar_option_set(resources = list(bucket = "my-bucket-name"))
+tar_pipeline(
+  tar_target(dataset, get_large_dataset(), format = "aws_fst_tbl"),
+  tar_target(analysis, analyze_dataset(dataset), format = "aws_qs")
+)
+```
+
+
+```r
+# R session
+tar_make()
+tar_read(dataset)
+```
+
+???
+
+The simpler data store paved the way for seamless, Metaflow-like integration with Amazon S3. There's a little config, but after that, `targets` will automatically upload the return values to an S3 bucket. And retrieving cloud data feels exactly the same as reading local data.
+
+---
+
+## Show which functions are out of date
+
+![](./images/graph_imports.png)
+
+???
+
+drake tells you which targets are out of date, but it cannot point to the precise functions and global objects that changed since the last run of the pipeline. targets provides this information, which significantly decreases frustration and increases reproducibility. In this example dependency graph, we can see that the create_plot() function changed, which is one of the reasons targets hist and report are no longer up to date.
+
+---
+
+## Dynamic branching with `dplyr`
+
+
+```r
+library(dplyr)
+library(targets)
+data.frame(
+  x = seq_len(6),
+  id = rep(letters[seq_len(3)], each = 2)
+) %&gt;%
+  group_by(id) %&gt;%
+* tar_group()
+#&gt; # A tibble: 6 x 3
+#&gt; # Groups:   id [3]
+#&gt;       x id    tar_group
+#&gt;   &lt;int&gt; &lt;chr&gt;     &lt;int&gt;
+#&gt; 1     1 a             1
+#&gt; 2     2 a             1
+#&gt; 3     3 b             2
+#&gt; 4     4 b             2
+#&gt; 5     5 c             3
+#&gt; 6     6 c             3
+```
+
+???
+
+Now for dynamic branching. drake began as a static tool, whereas targets is fundamentally dynamic. In fact, targets finally achieves one of the most frequently requested features for drake: dynamic branching over arbitrary subsets of data frames. First, we define a grouped data frame with `dplyr::group_by()`, `targets::tar_group()`, and `iteration = "group"`.
+
+---
+
+## Define a target with groups.
+
+
+```r
+tar_target(
+  data,
+  data.frame(
+    x = seq_len(6),
+    id = rep(letters[seq_len(3)], each = 2)
+  ) %&gt;%
+    group_by(id) %&gt;%
+*   tar_group(),
+* iteration = "group"
+)
+```
+
+???
+
+
+Then, every downstream target that branches over it will automatically create one branch for each group of rows.
+
+---
+
+## Inefficient dynamic branching in drake
+
+![](./images/dynamic_drake.png)
+
+???
+
+The efficiency of dynamic branching is also better. Dynamic sub-targets in drake are strictly nested inside their parents, so all the sub-targets in a group must finish before any downstream sub-target can begin. But targets knows how to advance forward even if not all the upstream branches are finished. This behavior saves runtime and conserves computing resources and gets work done faster..
+
+---
+
+## Efficient dynamic branching in targets
+
+![](./images/dynamic_targets.png)
+
+???
+
+The efficiency of dynamic branching is also better. Dynamic sub-targets in drake are strictly nested inside their parents, so all the sub-targets in a group must finish before any downstream sub-target can begin. But targets knows how to advance forward even if not all the upstream branches are finished. This behavior saves runtime and conserves computing resources and gets work done faster..
+
+---
+
+## Metaprogramming
+
+* `tar_target_raw()` avoids non-standard evaluation and supports third-party metaprogramming.
+* The following are equivalent ways to define a target.
+
+
+```r
+# For most users:
+tar_target(data, simulate_data(), pattern = map(index))
+
+# For developers who metaprogram reusable pipeline archetypes:
+tar_target_raw(
+  "data",
+  quote(simulate_data()),
+  pattern = quote(map(index))
+)
+```
+
+???
+
+Lastly, targets is easier to extend and build on. Unlike drake, targets can avoid non-standard evaluation and domain-specific languages. The tar_target_raw() function lets you define targets programmatically and opens up a lot of flexibility. The online manual walks you through how to to use tar_target_raw() for custom static branching.
+
+---
+
+## Target archetypes
+
+* The `tarchetypes` package has helpers for commonly used targets: &lt;https://wlandau.github.io/tarchetypes/&gt;
+
+Function | Target archetype
+---|---
+`tar_render()` | Render a dependency-aware R Markdown report.
+`tar_knit()` | Run a dependency-aware `knitr` report.
+`tar_change()` | Always run a target when a custom object changes.
+`tar_force()` | Always run a target when a custom condition is true.
+`tar_suppress()` | Never run a target when a custom condition is true.
+`tar_plan()` | Simplified `drake`-like syntax for `targets` pipelines.
+
+???
+
+In addition, there's an external package called `tarchetypes` that uses these metaprogramming capabilities to write shorthand for commonly used targets and pipelines. These archetypes abstract away configuration details and make it easier to write concise readable pipelines.
+
+---
+
+## Example targets workflow: validate a Bayesian hierarchical model
+
+$$
+`\begin{aligned}
+y_i &amp;\stackrel{\text{iid}}{\sim} \text{Normal}(\alpha + \beta \cdot x_i, \ \sigma^2) \\
+\alpha &amp;\sim \text{Normal}(0, 1) \\
+\beta &amp;\sim \text{Normal}(0, 1) \\
+\sigma &amp;\sim \text{HalfCauchy}(0, 1) \\
+\end{aligned}`
+$$
+
+1. Simulate 1000 datasets from the model.
+1. Fit the model to each simulated dataset.
+1. Verify that in 90% of the simulation reps, the `\(\beta\)` parameter values used for data generation are covered in 90% credible intervals. (Should repeat for other parameters too.)
+
+---
+
+## Stan model
+
+```r
+data {
+  int &lt;lower = 1&gt; n;
+  vector[n] x;
+  vector[n] y;
+}
+parameters {
+  real alpha;
+  real beta;
+  real &lt;lower = 0&gt; sigma;
+}
+model {
+  y ~ normal(alpha + x * beta, sigma);
+  alpha ~ normal(0, 1);
+  beta ~ normal(0, 1);
+  sigma ~ cauchy(0, 1);
+}
+```
+
+---
+
+background-image: ./images/not.png
+
+## &lt;img src="./images/no.png" width="40" height="40"&gt; Move away from numbered imperative scripts.
+
+
+```r
+run_everything.R
+R/
+├── 01-data.R
+├── 02-munge.R
+├── 03-model.R
+├── 04-results.R
+└── 05-plot.R
+data/
+└── customer_churn.csv
+```
+
+???
+
+Before we get started, let's talk about the implementation strategy. We're going to move away from numbered scripts and R Markdown as a way to manage the computation end to end. It's an okay strategy for small projects, but it falls apart quickly as a project grows.
+
+---
+
+## &lt;img src="./images/yes.png" width="60" height="40"&gt; Embrace **functions**.
+
+&gt;    - Everything that exists is an object.
+&gt;    - Everything that happens is a function call.
+&gt;
+&gt; John Chambers
+
+
+```r
+add_things &lt;- function(argument1, argument2) {
+  argument1 + argument2
+}
+
+add_things(1, 2)
+#&gt; [1] 3
+
+add_things(c(3, 4), c(5, 6))
+#&gt; [1]  8 10
+```
+
+???
+
+Functions scale much better for big stuff. A function is just a reusable set of instructions with multiple inputs and a single return value. Usually those inputs are explicitly defined and easy to create, and usually the function has an informative name. Functions are a fundamental built-in feature of almost every programming language we have, and they are particularly well suited to R, which was designed with formal functional programming principles in mind.
+
+The most obvious use for functions is as a way to avoid copies of repeated code scattered throughout your project. So instead of copying and pasting the same code block everywhere, you just call the function. But functions are not just for code you want to reuse, they're for code you want to understand. Functions are custom shorthand. They make your work easier to read, understand, break down into manageable pieces, document, test, and validate for serious research.
+
+---
+
+## Function for data generation
+
+
+```r
+simulate_data_continuous &lt;- function() {
+  alpha &lt;- rnorm(1, 0, 1)
+  beta &lt;- rnorm(1, 0, 1)
+  sigma &lt;- rhcauchy(1, 1)
+  x &lt;- rnorm(100, 1, 1) # continuous covariate
+  y &lt;- rnorm(100, alpha + x * beta, sigma)
+  sim &lt;- basename(tempfile(pattern = "sim"))
+  tibble(x = x, y = y, beta_true = beta, sim = sim)
+}
+```
+
+---
+
+## Function to fit the model
+
+
+```r
+fit_model &lt;- function(data, model_file) {
+  stan_data &lt;- list(x = data$x, y = data$y, n = nrow(data))
+  truth &lt;- data$beta_true[1]
+  model &lt;- cmdstan_model(model_file)
+  fit &lt;- model$sample(data = stan_data, refresh = 0)
+  fit$summary() %&gt;%
+    filter(variable == "beta") %&gt;%
+    mutate(beta_true = truth, cover_beta = q5 &lt; truth &amp; truth &lt; q95)
+}
+```
+
+---
+
+## Utility functions
+
+
+```r
+compile_model &lt;- function(model_file) {
+  quiet(cmdstan_model(model_file))
+  model_file
+}
+
+map_sims &lt;- function(data, model_file) {
+  data %&gt;%
+    group_by(sim) %&gt;%
+    group_modify(~quiet(fit_model(.x, model_file = model_file))) %&gt;%
+    ungroup()
+}
+
+quiet &lt;- function(code) {
+  sink(nullfile())
+  on.exit(sink())
+  suppressMessages(code)
+}
+```
+
+---
+
+## File structure
+
+
+```r
+├── run.sh
+├── run.R
+*├── _targets.R
+├── _targets/
+├── sge.tmpl
+├── R
+*│   ├── functions.R
+*│   └── utils.R
+├── stan
+│   └── model.stan
+└── report.Rmd
+```
+
+---
+
+## Setup in _targets.R
+
+
+```r
+# Beginning of _targets.R
+library(targets)
+library(tarchetypes)
+source("R/functions.R")
+source("R/utils.R")
+options(tidyverse.quiet = TRUE)
+options(clustermq.scheduler = "sge", clustermq.template = "sge.tmpl")
+tar_option_set(
+  packages = c("cmdstanr", "extraDistr", "rmarkdown", "tidyverse")
+)
+```
+
+---
+
+## Pipeline in _targets.R
+
+
+```r
+# End of _targets.R
+tar_pipeline(
+  tar_target(
+    model_file,
+    quiet(compile_model("stan/model.stan")),
+    format = "file",
+    deployment = "local"
+  ),
+  tar_target(index_batch, seq_len(25)),
+  tar_target(index_sim, seq_len(40)),
+  tar_target(
+    data_continuous,
+    map_dfr(index_sim, ~simulate_data_continuous()),
+    pattern = map(index_batch),
+    format = "fst_tbl"
+  )
+)
+```
+
+---
+
+## Inspect the graph
+
+
+```r
+tar_visnetwork()
+```
+
+&lt;img src="./images/graph1.png" height="400px"&gt;
+
+---
+
+## Run the targets
+
+
+```r
+tar_make()
+#&gt; ● run target batch_index
+#&gt; ● run target model_file
+#&gt; ● run branch data_continuous_f385e0ef
+#&gt; ● run branch data_continuous_0217a462
+#&gt; ● run branch data_continuous_a06bc09e
+#&gt; ● run branch data_continuous_c1e661c3
+#&gt; ...
+```
+
+---
+
+## Now all targets are up to date.
+
+
+```r
+tar_make()
+#&gt; ✓ skip target batch_index
+#&gt; ✓ skip target model_file
+#&gt; ✓ skip branch data_continuous_f385e0ef
+#&gt; ✓ skip branch data_continuous_0217a462
+#&gt; ✓ skip branch data_continuous_a06bc09e
+#&gt; ✓ skip branch data_continuous_c1e661c3
+#&gt; ...
+#&gt; ✓ Already up to date.
+```
+
+---
+
+## Now all targets are up to date.
+
+
+```r
+tar_visnetwork()
+```
+
+&lt;img src="./images/graph2.png" height="400px"&gt;
+
+---
+
+## Inspect the data
+
+
+```r
+tar_read(data_continuous, branches = 1) # see also tar_load()
+#&gt; # A tibble: 200 x 4
+#&gt;         x       y beta_true rep            
+#&gt;     &lt;dbl&gt;   &lt;dbl&gt;     &lt;dbl&gt; &lt;chr&gt;          
+#&gt;  1  0.446  1.37      -0.870 rep3841223f956f
+#&gt;  2  2.01  -0.361     -0.870 rep3841223f956f
+#&gt;  3  1.05  -0.183     -0.870 rep3841223f956f
+#&gt;  4  0.734 -0.891     -0.870 rep3841223f956f
+#&gt;  5  0.567  1.18      -0.870 rep3841223f956f
+#&gt;  6  1.30   0.306     -0.870 rep3841223f956f
+#&gt;  7  0.649  0.0242    -0.870 rep3841223f956f
+#&gt;  8  0.678  0.793     -0.870 rep3841223f956f
+#&gt;  9  1.05   0.688     -0.870 rep3841223f956f
+#&gt; 10 -0.437  2.25      -0.870 rep3841223f956f
+#&gt; # … with 190 more rows
+```
+
+---
+
+## Add the models to the pipeline
+
+
+```r
+# _targets.R
+# setup...
+tar_pipeline(
+  # existing targets...
+  tar_target(
+    fit_continuous,
+    map_sims(data_continuous, model_file = model_file),
+    pattern = map(data_continuous),
+    format = "fst_tbl"
+  )
+)
+```
+
+
+---
+
+## Check the dependency graph
+
+
+```r
+tar_visnetwork()
+```
+
+&lt;img src="./images/graph3.png" height = "400px"&gt;
+
+---
+
+## Run the models on a cluster
+
+
+```r
+tar_make_clustermq(workers = 25)
+#&gt; ✓ skip target batch_index
+#&gt; ✓ skip target model_file
+#&gt; ✓ skip branch data_continuous_f385e0ef
+#&gt; ✓ skip branch data_continuous_0217a462
+#&gt; ...
+#&gt; ● run branch fit_continuous_5f87e2ff
+#&gt; ● run branch fit_continuous_d5dfa376
+#&gt; ...
+```
+
+---
+
+## Inspect the model results
+
+
+```r
+tar_read(fit_continuous)
+#&gt; # A tibble: 8 x 13
+#&gt;   rep   variable    mean  median      sd     mad     q5     q95
+#&gt;   &lt;chr&gt; &lt;chr&gt;      &lt;dbl&gt;   &lt;dbl&gt;   &lt;dbl&gt;   &lt;dbl&gt;  &lt;dbl&gt;   &lt;dbl&gt;
+#&gt; 1 rep3… beta     -0.765  -0.765  0.0868  0.0856  -0.905 -0.619 
+#&gt; 2 rep3… beta      1.03    1.03   0.0840  0.0852   0.892  1.17  
+#&gt; 3 rep3… beta     -0.560  -0.560  0.0309  0.0306  -0.612 -0.511 
+#&gt; 4 rep3… beta      0.859   0.859  0.0302  0.0306   0.810  0.908 
+#&gt; 5 rep3… beta     -0.0980 -0.0962 0.111   0.109   -0.280  0.0792
+#&gt; 6 rep3… beta      0.462   0.463  0.0567  0.0565   0.369  0.555 
+#&gt; 7 rep3… beta      0.316   0.318  0.0848  0.0840   0.178  0.454 
+#&gt; 8 rep3… beta      0.499   0.499  0.00727 0.00709  0.486  0.511 
+#&gt; # … with 5 more variables: rhat &lt;dbl&gt;, ess_bulk &lt;dbl&gt;,
+#&gt; #   ess_tail &lt;dbl&gt;, beta_true &lt;dbl&gt;, cover_beta &lt;lgl&gt;
+```
+
+
+---
+
+## Inspect the graph
+
+
+```r
+tar_visnetwork(label = c("time", "size", "branches"))
+```
+
+&lt;img src="./images/graph4.png" height = "400px"&gt;
+
+
+---
+
+## Add discrete data
+
+
+```r
+# functions.R
+simulate_data_discrete &lt;- function() {
+  alpha &lt;- rnorm(1, 0, 1)
+  beta &lt;- rnorm(1, 0, 1)
+  sigma &lt;- rhcauchy(1, 1)
+  x &lt;- rbinom(100, 1, 0.5) # discrete covariate
+  y &lt;- rnorm(100, alpha + x * beta, sigma)
+  sim &lt;- basename(tempfile(pattern = "sim"))
+  tibble(x = x, y = y, beta_true = beta, sim = sim)
+}
+```
+
+---
+
+## Add an R Markdown report
+
+&lt;img src="./images/report.png" height = "450px"&gt;
+
+---
+
+## Add new targets
+
+
+```r
+# _targets.R
+# setup...
+tar_pipeline(
+  # existing targets...
+  tar_target(
+    data_discrete,
+    map_dfr(index_sim, ~simulate_data_discrete()),
+    pattern = map(index_batch),
+    format = "fst_tbl"
+  ),
+  tar_target(
+    fit_discrete,
+    map_sims(data_discrete, model_file = model_file),
+    pattern = map(data_discrete),
+    format = "fst_tbl"
+  ),
+  tar_render(report, "report.Rmd") # from tarchetypes
+)
+```
+
+---
+
+## New targets
+
+
+```r
+tar_visnetwork(label = c("time", "size", "branches"))
+```
+
+&lt;img src="./images/graph5.png" height = "400px"&gt;
+
+
+---
+
+## Only the new targets run
+
+
+```r
+tar_make_clustermq(workers = 25)
+#&gt; ✓ skip target batch_index
+#&gt; ✓ skip target model_file
+#&gt; ✓ skip branch data_continuous_f385e0ef
+#&gt; ✓ skip branch data_continuous_0217a462
+#&gt; ...
+#&gt; ✓ skip branch fit_continuous_5f87e2ff
+#&gt; ✓ skip branch fit_continuous_d5dfa376
+#&gt; ...
+#&gt; ● run branch data_discrete_06241955
+#&gt; ● run branch data_discrete_88664909
+#&gt; ...
+#&gt; ● run branch fit_discrete_e31322f6
+#&gt; ● run branch fit_discrete_a2fab7f4
+#&gt; ...
+#&gt; ● run target report
+```
+
+---
+
+## Change a function
+
+
+```r
+# functions.R
+simulate_data_discrete &lt;- function(...) {
+  alpha &lt;- rnorm(1, 0, 1)
+  beta &lt;- rnorm(1, 0, 1)
+  sigma &lt;- rhcauchy(1, 1)
+* x &lt;- rbinom(100, 1, 0.3) # previously 0.5
+  y &lt;- rnorm(100, alpha + x * beta, sigma)
+  sim &lt;- basename(tempfile(pattern = "sim"))
+  tibble(x = x, y = y, beta_true = beta, sim = sim)
+}
+```
+
+---
+
+## Downstream targets are automatically invalidated
+
+
+```r
+tar_visnetwork()
+```
+
+&lt;img src="./images/graph5.png" height = "400px"&gt;
+
+---
+
+## Only the affected targets rerun
+
+
+```r
+tar_make_clustermq(workers = 25)
+#&gt; ✓ skip target batch_index
+#&gt; ✓ skip target model_file
+#&gt; ✓ skip branch data_continuous_f385e0ef
+#&gt; ✓ skip branch data_continuous_0217a462
+#&gt; ...
+#&gt; ✓ skip branch fit_continuous_5f87e2ff
+#&gt; ✓ skip branch fit_continuous_d5dfa376
+#&gt; ...
+#&gt; ● run branch data_discrete_06241955
+#&gt; ● run branch data_discrete_88664909
+#&gt; ...
+#&gt; ● run branch fit_discrete_e31322f6
+#&gt; ● run branch fit_discrete_a2fab7f4
+#&gt; ...
+#&gt; ● run target report
+```
+
+---
+
+## Inspect the report
+
+&lt;img src="./images/report2.png" height = "500px"&gt;
+
+---
+
+## Inspect the report
+
+&lt;img src="./images/report3.png" height = "500px"&gt;
+
+---
+
+## Evidence of reproducibility
+
+
+```r
+tar_visnetwork()
+```
+
+&lt;img src="./images/graph6.png" height = "400px"&gt;
+
+---
+
+## Resources
+
+* Get [`targets`](https://github.com/wlandau/targets):
+
+
+```r
+install.packages("remotes")
+remotes::install_github("wlandau/targets")
+```
+
+* Code: &lt;https://github.com/wlandau/targets-stan&gt;
+* These slides: &lt;https://wlandau.github.io/nyhackr2020&gt;
+* Tutorial materials: &lt;https://github.com/wlandau/targets-tutorial&gt;
+* Development repository: &lt;https://github.com/wlandau/targets&gt;
+* Full user manual: &lt;https://wlandau.github.io/targets-manual/&gt;
+* Reference website: &lt;https://wlandau.github.io/targets/&gt;
+
+???
+
+There are several resources to learn about targets. There's a reference website, an online user manual, and a repository with the example code from today.
+    </textarea>
+<style data-target="print-only">@media screen {.remark-slide-container{display:block;}.remark-slide-scaler{box-shadow:none;}}</style>
+<script src="https://remarkjs.com/downloads/remark-latest.min.js"></script>
+<script>var slideshow = remark.create({
+"highlightLines": true
+});
+if (window.HTMLWidgets) slideshow.on('afterShowSlide', function (slide) {
+  window.dispatchEvent(new Event('resize'));
+});
+(function(d) {
+  var s = d.createElement("style"), r = d.querySelector(".remark-slide-scaler");
+  if (!r) return;
+  s.type = "text/css"; s.innerHTML = "@page {size: " + r.style.width + " " + r.style.height +"; }";
+  d.head.appendChild(s);
+})(document);
+
+(function(d) {
+  var el = d.getElementsByClassName("remark-slides-area");
+  if (!el) return;
+  var slide, slides = slideshow.getSlides(), els = el[0].children;
+  for (var i = 1; i < slides.length; i++) {
+    slide = slides[i];
+    if (slide.properties.continued === "true" || slide.properties.count === "false") {
+      els[i - 1].className += ' has-continuation';
+    }
+  }
+  var s = d.createElement("style");
+  s.type = "text/css"; s.innerHTML = "@media print { .has-continuation { display: none; } }";
+  d.head.appendChild(s);
+})(document);
+// delete the temporary CSS (for displaying all slides initially) when the user
+// starts to view slides
+(function() {
+  var deleted = false;
+  slideshow.on('beforeShowSlide', function(slide) {
+    if (deleted) return;
+    var sheets = document.styleSheets, node;
+    for (var i = 0; i < sheets.length; i++) {
+      node = sheets[i].ownerNode;
+      if (node.dataset["target"] !== "print-only") continue;
+      node.parentNode.removeChild(node);
+    }
+    deleted = true;
+  });
+})();
+(function() {
+  "use strict"
+  // Replace <script> tags in slides area to make them executable
+  var scripts = document.querySelectorAll(
+    '.remark-slides-area .remark-slide-container script'
+  );
+  if (!scripts.length) return;
+  for (var i = 0; i < scripts.length; i++) {
+    var s = document.createElement('script');
+    var code = document.createTextNode(scripts[i].textContent);
+    s.appendChild(code);
+    var scriptAttrs = scripts[i].attributes;
+    for (var j = 0; j < scriptAttrs.length; j++) {
+      s.setAttribute(scriptAttrs[j].name, scriptAttrs[j].value);
+    }
+    scripts[i].parentElement.replaceChild(s, scripts[i]);
+  }
+})();
+(function() {
+  var links = document.getElementsByTagName('a');
+  for (var i = 0; i < links.length; i++) {
+    if (/^(https?:)?\/\//.test(links[i].getAttribute('href'))) {
+      links[i].target = '_blank';
+    }
+  }
+})();
+// adds .remark-code-has-line-highlighted class to <pre> parent elements
+// of code chunks containing highlighted lines with class .remark-code-line-highlighted
+(function(d) {
+  const hlines = d.querySelectorAll('.remark-code-line-highlighted');
+  const preParents = [];
+  const findPreParent = function(line, p = 0) {
+    if (p > 1) return null; // traverse up no further than grandparent
+    const el = line.parentElement;
+    return el.tagName === "PRE" ? el : findPreParent(el, ++p);
+  };
+
+  for (let line of hlines) {
+    let pre = findPreParent(line);
+    if (pre && !preParents.includes(pre)) preParents.push(pre);
+  }
+  preParents.forEach(p => p.classList.add("remark-code-has-line-highlighted"));
+})(document);</script>
+
+<script>
+slideshow._releaseMath = function(el) {
+  var i, text, code, codes = el.getElementsByTagName('code');
+  for (i = 0; i < codes.length;) {
+    code = codes[i];
+    if (code.parentNode.tagName !== 'PRE' && code.childElementCount === 0) {
+      text = code.textContent;
+      if (/^\\\((.|\s)+\\\)$/.test(text) || /^\\\[(.|\s)+\\\]$/.test(text) ||
+          /^\$\$(.|\s)+\$\$$/.test(text) ||
+          /^\\begin\{([^}]+)\}(.|\s)+\\end\{[^}]+\}$/.test(text)) {
+        code.outerHTML = code.innerHTML;  // remove <code></code>
+        continue;
+      }
+    }
+    i++;
+  }
+};
+slideshow._releaseMath(document);
+</script>
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+(function () {
+  var script = document.createElement('script');
+  script.type = 'text/javascript';
+  script.src  = 'https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-MML-AM_CHTML';
+  if (location.protocol !== 'file:' && /^https?:/.test(script.src))
+    script.src  = script.src.replace(/^https?:/, '');
+  document.getElementsByTagName('head')[0].appendChild(script);
+})();
+</script>
+  </body>
+</html>
