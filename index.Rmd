@@ -594,7 +594,7 @@ tar_pipeline(
     model_file,
     quiet(compile_model("stan/model.stan")),
     format = "file",
-    deployment = "master"
+    deployment = "main"
   ),
   tar_target(index_batch, seq_len(25)),
   tar_target(index_sim, seq_len(40)),
