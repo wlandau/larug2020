@@ -79,9 +79,9 @@ background-size: contain;
 
 ???
 
-Thank you all for coming, and thank you to nyhackr and Lander Analytics for the opportunity to speak today.
+Thank you all for coming, and thank you to for the opportunity to speak today.
 
-I come from the life sciences, and we develop ambitious computational workflows for Statistics and data science. There's a lot of Bayesian analysis, machine learning, simulation, and prediction. Other domains have similar workloads, and we need to think about both efficiency and reproducibility right from the start.
+I come from the life sciences, and we develop ambitious computational workflows for Statistics and data science. There's a lot of Bayesian analysis, machine learning, etc.
 
 ---
 
@@ -98,7 +98,7 @@ I come from the life sciences, and we develop ambitious computational workflows 
 
 ???
 
-Many of these projects require long runtimes. Methods like Markov chain Monte Carlo and deep neural nets are computationally expensive. It could take hours or even days just to fit a single model. That's fine if you're only going to run the project once, or at regularly scheduled times. But if the code is still under development, it's easy to get trapped in a vicious Sisyphean cycle.
+These projects require long runtimes. MCMC and deep neural nets are expensive. It could take several minutes or hours just to fit a single model. So when the code is under rapid development, we run into trouble.
 
 ---
 
@@ -109,7 +109,7 @@ Many of these projects require long runtimes. Methods like Markov chain Monte Ca
 
 ???
 
-A large workflow has a large number of moving parts. We have datasets that we preprocess or simulate, analyses of those datasets, and summaries of the analyses.
+A large workflow has a bunch of moving parts.
 
 ---
 
@@ -121,7 +121,7 @@ A large workflow has a large number of moving parts. We have datasets that we pr
 
 ???
 
-If you change any one of these parts - whether it's a bugfix, a tweak to a model, or some new data -
+If you change any one of these stages,
 
 ---
 
@@ -133,7 +133,7 @@ If you change any one of these parts - whether it's a bugfix, a tweak to a model
 
 ???
 
-Then everything that depends on it is no longer valid, and you need to rerun the computation to bring the results back up to date. This is seriously frustrating when you're in development and you're still making a constant stream of changes to code and data in real time. If every change means you need to rerun the project, there's no way the results can keep up...
+then everything that depends on it is no longer valid, and you need to rerun the computation to bring the output back up to date. Changes like this happen all the time. They usually happen much faster than it actually takes to run the project, and there's no way the results can keep up.
 
 ---
 
@@ -148,7 +148,7 @@ Then everything that depends on it is no longer valid, and you need to rerun the
 
 ???
 
-...unless you use a pipeline tool. There are pipeline tools for production which resemble Apache Airflow, and there are pipeline tools for development which resemble GNU Make. Today, I'm going to focus on Make-like tools because those are the ones I think are designed for this part of the process. It's an action-packed space, and there are a lot of great options. But unfortunately, there's not a whole lot for R.
+...unless you use a Make-like pipeline tool to avoid repeating yourself. There are some great pipeline tools for workflow automation, but historically not a whole lot for R.
 
 ---
 
@@ -175,6 +175,7 @@ That's where targets comes in. targets is a Make-like pipeline tool that is fund
 * `targets` was created to overcome these limitations and create a smoother user experience.
     1. Stronger guardrails by design.
     1. A friendlier, lighter, more transparent data management system.
+    1. Seamless cloud integration with Amazon S3.
     1. Show which *functions* are up to date.
     1. More flexible dynamic branching, including compatibility with `dplyr::group_by()`.
     1. Improved parallel efficiency.
@@ -183,7 +184,7 @@ That's where targets comes in. targets is a Make-like pipeline tool that is fund
 
 ???
 
-But what about drake? drake already does all these things, and it's still an excellent choice for Make-like pipeline management. But it does have permanent user-side limitations. We've been developing, improving, expanding, and refining drake for several years, and we've reached the point where the most important problems to tackle are exactly the problems we cannot solve in this tool. It's just too big and too set in its ways, and its architecture was originally designed around assumptions that no longer hold up. To overcome these permanent limitations, we need a new tool that borrows from drake's journey and advances the user experience beyond what drake is capable of, and that new tool is targets. targets has stronger guardrails, lighter data management, greater transparency around data and the process of watching for changes, more flexible dynamic branching, better parallel efficiency, and design that lets us build on top of it more easily. The targets package website has a statement of need describing the changes in more detail.
+But what about drake? drake already does this. It's never going away, I will still maintian it. However, drake has improved so much over the last four years, that the only way left to make nontrivial progress for users is to finally confront systemic limitations that drake is stuck with forever, limitations so deep in the architecture that we can't fix them without breaking the tool or existing projects that use it. So to move the general capability forward, beyond what drake will ever be capable of, we need a new package. And that package is called "targets".
 
 ---
 
@@ -197,7 +198,7 @@ But what about drake? drake already does all these things, and it's still an exc
 
 ???
 
-Let's start with guardrails. The only way to use targets is the correct way. Unless you deliberately opt out for debugging purposes, targets always does its work in a fresh clean reproducible R process to avoid unpredictably invalidating targets. It's also paternalistic about your working directory and data storage. It removes flexibility where it doesn't belong, and it keeps users from getting themselves into trouble.
+First of all, targets is deliberately less flexible. Less flexibility is actually a good thing here. Targets runs the pipeline in a clean new process by default, and it has strict policies about your working directory and data store. So it's more reproducible, more dependable, and ultimately smoother for the user.
 
 ---
 
@@ -222,7 +223,7 @@ Let's start with guardrails. The only way to use targets is the correct way. Unl
 
 ???
 
-Now for data management. drake's cache is a large file system. It has hundreds of tiny bookkeeping files, it gets heavier and heavier over time unless you deliberately run garbage collection, and it's not human-readable. If you commit this thing to Git, or try to share with your colleagues, or try to diagnose cryptic errors that come from corrupted data, you're going to have a hard time.
+Now for data management. drake's cache has a huge number of cryptically-named files. It's not portable, and it's brittle.
 
 ---
 
@@ -242,7 +243,7 @@ _targets/
 
 ???
 
-targets simplifies data storage. It only stores what it needs to. There's one file per target in the objects/ folder, one data.table with metadata, and one data.table with runtime progress information. The data store is much lighter and much more portable, and the file names all make sense. And it survives corruptions far more easily. Of all these files, only the metadata file is sacred. Anything else can break and the project can recover just by rerunning one or two targets.
+{targets} simplifies storage. The data store is light, portable, resilient, and easy to understand. It can recover if a data file breaks, and third-party products like Git and Dropbox and OneDrive have a much easier time.
 
 ---
 
@@ -269,7 +270,7 @@ tar_read(dataset)
 
 ???
 
-The simpler data store paved the way for seamless, Metaflow-like integration with Amazon S3. There's a little config, but after that, `targets` will automatically upload the return values to an S3 bucket. And retrieving cloud data feels exactly the same as reading local data.
+The simpler data store paved the way for seamless, Metaflow-like integration with Amazon S3. After just a little config, `targets` can automatically upload output to an S3 bucket and track it. And retrieving cloud data feels exactly the same as reading local data.
 
 ---
 
@@ -279,7 +280,7 @@ The simpler data store paved the way for seamless, Metaflow-like integration wit
 
 ???
 
-drake tells you which targets are out of date, but it cannot point to the precise functions and global objects that changed since the last run of the pipeline. targets provides this information, which significantly decreases frustration and increases reproducibility. In this example dependency graph, we can see that the create_plot() function changed, which is one of the reasons targets hist and report are no longer up to date.
+drake tells you which targets are out of date, but it says less about functions. The targets package shows the status of functions too, which makes it easier to find out why things are not up to date.
 
 ---
 
@@ -287,52 +288,26 @@ drake tells you which targets are out of date, but it cannot point to the precis
 
 
 ```r
-library(dplyr)
 library(targets)
-data.frame(
-  x = seq_len(6),
-  id = rep(letters[seq_len(3)], each = 2)
-) %&gt;%
-  group_by(id) %&gt;%
-* tar_group()
-#&gt; # A tibble: 6 x 3
-#&gt; # Groups:   id [3]
-#&gt;       x id    tar_group
-#&gt;   &lt;int&gt; &lt;chr&gt;     &lt;int&gt;
-#&gt; 1     1 a             1
-#&gt; 2     2 a             1
-#&gt; 3     3 b             2
-#&gt; 4     4 b             2
-#&gt; 5     5 c             3
-#&gt; 6     6 c             3
-```
-
-???
-
-Now for dynamic branching. drake began as a static tool, whereas targets is fundamentally dynamic. In fact, targets finally achieves one of the most frequently requested features for drake: dynamic branching over arbitrary subsets of data frames. First, we define a grouped data frame with `dplyr::group_by()`, `targets::tar_group()`, and `iteration = "group"`.
-
----
-
-## Define a target with groups.
-
-
-```r
-tar_target(
-  data,
-  data.frame(
-    x = seq_len(6),
-    id = rep(letters[seq_len(3)], each = 2)
-  ) %&gt;%
-    group_by(id) %&gt;%
-*   tar_group(),
-* iteration = "group"
+source("functions.R") # Defines get_data() and analyze_group().
+tar_options(packages = "dplyr")
+tar_pipeline(
+  tar_target(
+    grouped_data,
+    get_data() %&gt;% group_by(id) %&gt;% tar_group(),
+    iteration = "group"
+  ),
+  tar_target(
+    model,
+    analyze_group(grouped_data),
+    dynamic = map(grouped_data) # Maps over groups defined by group_by()
+  )
 )
 ```
 
 ???
 
-
-Then, every downstream target that branches over it will automatically create one branch for each group of rows.
+Dynamic branching is more flexible. Targets lets you take a data frame, group it with dplyr, and then dynamically branch over the subsets. Folks have been asking for this in drake for years. And it's only possible now because unlike drake, targets is dynamic to the core.
 
 ---
 
@@ -342,7 +317,7 @@ Then, every downstream target that branches over it will automatically create on
 
 ???
 
-The efficiency of dynamic branching is also better. Dynamic sub-targets in drake are strictly nested inside their parents, so all the sub-targets in a group must finish before any downstream sub-target can begin. But targets knows how to advance forward even if not all the upstream branches are finished. This behavior saves runtime and conserves computing resources and gets work done faster..
+Dynamic branching is also more efficient. So because of the original design of the architecture, drake was forced to look at dynamic branching with a traditional map-reduce mindset.
 
 ---
 
@@ -352,7 +327,7 @@ The efficiency of dynamic branching is also better. Dynamic sub-targets in drake
 
 ???
 
-The efficiency of dynamic branching is also better. Dynamic sub-targets in drake are strictly nested inside their parents, so all the sub-targets in a group must finish before any downstream sub-target can begin. But targets knows how to advance forward even if not all the upstream branches are finished. This behavior saves runtime and conserves computing resources and gets work done faster..
+But in targets, downstream branches can start even if some of the upstream branches are still running. So your work gets done faster.
 
 ---
 
@@ -376,7 +351,7 @@ tar_target_raw(
 
 ???
 
-Lastly, targets is easier to extend and build on. Unlike drake, targets can avoid non-standard evaluation and domain-specific languages. The tar_target_raw() function lets you define targets programmatically and opens up a lot of flexibility. The online manual walks you through how to to use tar_target_raw() for custom static branching.
+Lastly, targets is easier to extend and build on. There's a way to declare a target while avoiding non-standard evaluation, which opens a Pandora's Box of third-party interface development. 
 
 ---
 
@@ -395,7 +370,7 @@ Function | Target archetype
 
 ???
 
-In addition, there's an external package called `tarchetypes` that uses these metaprogramming capabilities to write shorthand for commonly used targets and pipelines. These archetypes abstract away configuration details and make it easier to write concise readable pipelines.
+The "tarchetypes" package takes advantage of this. It's full of little archetypes for commonly-used targets. `tar_render()`, for example, seamlessly integrates dependency-aware R Markdown into pipelines, including but not limited to parameterized reports where the parameters are actually upstream targets.
 
 ---
 
